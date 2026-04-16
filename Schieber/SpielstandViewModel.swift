@@ -116,8 +116,14 @@ final class SpielstandViewModel: ObservableObject {
 
     func resetAll() {
         guard let ctx = modelContext else { return }
-        for r in runden {
-            ctx.delete(r)
+        // Fetch all Runde objects from the stored model context and delete them explicitly.
+        do {
+            let all: [Runde] = try ctx.fetch(FetchDescriptor<Runde>())
+            for r in all {
+                ctx.delete(r)
+            }
+        } catch {
+            print("resetAll failed: \(error)")
         }
     }
 
