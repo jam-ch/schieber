@@ -33,4 +33,4 @@ Contributing
 - Feel free to open issues or PRs on GitHub.
 
 License
-- Add a license if you plan to share this publicly.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
