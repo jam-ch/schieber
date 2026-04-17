@@ -1,7 +1,6 @@
 import SwiftUI
 import Combine
 import SwiftData
-import UniformTypeIdentifiers
 
 // MARK: - Models
 
@@ -23,17 +22,6 @@ enum Spielart: Int, CaseIterable, Identifiable {
         case .slalom: return "Slalom"
         }
     }
-}
-
-// Simple ActivityView wrapper for share sheet
-struct ActivityView: UIViewControllerRepresentable {
-    let activityItems: [Any]
-
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
-    }
-
-    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }
 
 // MARK: - Views
@@ -64,13 +52,7 @@ struct ContentView: View {
     // Editing match flag
     @State private var editMatch = false
 
-    @State private var showShareSheet = false
-    @State private var exportURL: URL?
-    @State private var showImporter = false
     @State private var showResetAlert = false
-    // Export error handling
-    @State private var showExportError = false
-    @State private var exportErrorMessage: String? = nil
 
     // Editing state
     @State private var editingRunde: Runde? = nil
@@ -325,12 +307,6 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
-                        Button("Exportieren") {
-                            doExport()
-                        }
-                        Button("Importieren") {
-                            showImporter = true
-                        }
                         Button("Zurücksetzen", role: .destructive) {
                             showResetAlert = true
                         }
@@ -345,18 +321,6 @@ struct ContentView: View {
                         focusedField = nil
                         editFocusedField = nil
                     }
-                }
-            }
-            .fileImporter(isPresented: $showImporter, allowedContentTypes: [.json]) { result in
-                switch result {
-                case .success(let url):
-                    do {
-                        try vm.importJSON(from: url)
-                    } catch {
-                        print("Import failed: \(error)")
-                    }
-                case .failure(let err):
-                    print("Import error: \(err)")
                 }
             }
             .sheet(isPresented: Binding(get: { editingRunde != nil }, set: { if !$0 { editingRunde = nil } })) {
@@ -466,18 +430,6 @@ struct ContentView: View {
                     EmptyView()
                 }
             }
-            .sheet(isPresented: $showShareSheet, onDismiss: { exportURL = nil }) {
-                if let url = exportURL {
-                    ActivityView(activityItems: [url])
-                } else {
-                    Text("Export fehlgeschlagen")
-                }
-            }
-            .alert("Export fehlgeschlagen", isPresented: $showExportError, actions: {
-                Button("OK", role: .cancel) { exportErrorMessage = nil }
-            }, message: {
-                Text(exportErrorMessage ?? "Unbekannter Fehler")
-            })
             .alert("Alle Runden löschen?", isPresented: $showResetAlert, actions: {
                 Button("Abbrechen", role: .cancel) {}
                 Button("Löschen", role: .destructive) {
@@ -525,25 +477,6 @@ struct ContentView: View {
         guard let r = editingRunde, let a = Int(editPunkteA), let b = Int(editPunkteB) else { return }
         vm.updateRunde(r, punkteA: a, punkteB: b, spielart: editSpielart, match: editMatch)
         editingRunde = nil
-    }
-
-    private func doExport() {
-        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("runden_export_\(Int(Date().timeIntervalSince1970)).json")
-        do {
-            try vm.exportJSON(to: tmp)
-            // Ensure file was actually written before presenting share sheet
-            if FileManager.default.fileExists(atPath: tmp.path) {
-                exportURL = tmp
-                showShareSheet = true
-            } else {
-                exportErrorMessage = "Export file not found after write: \(tmp.path)"
-                showExportError = true
-            }
-        } catch {
-            // Surface error to the user via alert for easier debugging
-            exportErrorMessage = "Export failed: \(error)"
-            showExportError = true
-        }
     }
 
     private func delete(at offsets: IndexSet) {
