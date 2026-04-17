@@ -17,8 +17,8 @@ enum Spielart: Int, CaseIterable, Identifiable {
         switch self {
         case .normal: return "Einfach" // renamed from "Normal" to "Einfach"
         case .doppelt: return "Doppelt"
-        case .obeabe: return "Obeabe"
-        case .undeufe: return "Undeufe"
+        case .obeabe: return "ObeAbe"
+        case .undeufe: return "UndeUfe"
         case .slalom: return "Slalom"
         }
     }
@@ -109,6 +109,31 @@ struct ContentView: View {
                 // Totals computed directly from persisted rounds to ensure correctness
                 let totalA = runden.map { $0.totalA }.reduce(0, +)
                 let totalB = runden.map { $0.totalB }.reduce(0, +)
+
+                Section(header: Text("Spielstand")) {
+                    VStack(spacing: 8) {
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(teamAName).font(.caption)
+                                Text("\(totalA)")
+                                    .font(.title)
+                                    .bold()
+                                    .accessibilityLabel("Spielstand \(teamAName)")
+                                    .accessibilityValue("\(totalA)")
+                            }
+                            Spacer()
+                            VStack(alignment: .leading) {
+                                Text(teamBName).font(.caption)
+                                Text("\(totalB)")
+                                    .font(.title)
+                                    .bold()
+                                    .accessibilityLabel("Spielstand \(teamBName)")
+                                    .accessibilityValue("\(totalB)")
+                            }
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
 
                 Section("Neue Runde") {
                     VStack(alignment: .leading, spacing: 6) {
@@ -216,31 +241,6 @@ struct ContentView: View {
                             .foregroundColor(.red)
                             .font(.caption)
                     }
-                }
-
-                Section(header: Text("Spielstand")) {
-                    VStack(spacing: 8) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(teamAName).font(.caption)
-                                Text("\(totalA)")
-                                    .font(.title)
-                                    .bold()
-                                    .accessibilityLabel("Spielstand \(teamAName)")
-                                    .accessibilityValue("\(totalA)")
-                            }
-                            Spacer()
-                            VStack(alignment: .leading) {
-                                Text(teamBName).font(.caption)
-                                Text("\(totalB)")
-                                    .font(.title)
-                                    .bold()
-                                    .accessibilityLabel("Spielstand \(teamBName)")
-                                    .accessibilityValue("\(totalB)")
-                            }
-                        }
-                    }
-                    .padding(.vertical, 6)
                 }
 
                 Section("Runden") {
