@@ -53,6 +53,8 @@ struct ContentView: View {
     @State private var editMatch = false
 
     @State private var showResetAlert = false
+    // Scoreboard expanded/collapsed state
+    @State private var scoreboardExpanded: Bool = true
 
     // Editing state
     @State private var editingRunde: Runde? = nil
@@ -111,48 +113,76 @@ struct ContentView: View {
                 let totalB = runden.map { $0.totalB }.reduce(0, +)
 
                 Section(header: Text("Spielstand")) {
-                    // Compact scoreboard card for a smoother visual flow
-                    HStack(spacing: 16) {
-                        // Team A block (left-aligned)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(teamAName)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("\(totalA)")
-                                .font(.system(size: 34, weight: .bold, design: .rounded))
-                                .accessibilityLabel("Spielstand \(teamAName)")
-                                .accessibilityValue("\(totalA)")
+                    // Tappable scoreboard card: toggles expanded/collapsed view
+                    Button(action: {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                            scoreboardExpanded.toggle()
                         }
+                    }) {
+                        VStack(spacing: 8) {
+                            HStack(spacing: 16) {
+                                // Team A block (left-aligned)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(teamAName)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text("\(totalA)")
+                                        .font(.system(size: scoreboardExpanded ? 34 : 24, weight: .bold, design: .rounded))
+                                        .accessibilityLabel("Spielstand \(teamAName)")
+                                        .accessibilityValue("\(totalA)")
+                                }
 
-                        Spacer()
+                                Spacer()
 
-                        // Center divider with optional label (keeps visual balance)
-                        VStack {
-                            Text("vs")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
+                                // Center divider with optional label (keeps visual balance)
+                                VStack {
+                                    Text("vs")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+
+                                Spacer()
+
+                                // Team B block (right-aligned)
+                                VStack(alignment: .trailing, spacing: 4) {
+                                    Text(teamBName)
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Text("\(totalB)")
+                                        .font(.system(size: scoreboardExpanded ? 34 : 24, weight: .bold, design: .rounded))
+                                        .accessibilityLabel("Spielstand \(teamBName)")
+                                        .accessibilityValue("\(totalB)")
+                                }
+                            }
+
+                            // Expanded details
+                            if scoreboardExpanded {
+                                VStack(spacing: 4) {
+                                    HStack {
+                                        Text("Runden: \(runden.count)")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                        Spacer()
+                                        if let last = runden.first {
+                                            Text(Self.dateFormatter.string(from: last.createdAt))
+                                                .font(.caption2)
+                                                .foregroundColor(.secondary)
+                                        }
+                                    }
+                                }
+                                .transition(.opacity.combined(with: .move(edge: .top)))
+                            }
                         }
-
-                        Spacer()
-
-                        // Team B block (right-aligned)
-                        VStack(alignment: .trailing, spacing: 4) {
-                            Text(teamBName)
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Text("\(totalB)")
-                                .font(.system(size: 34, weight: .bold, design: .rounded))
-                                .accessibilityLabel("Spielstand \(teamBName)")
-                                .accessibilityValue("\(totalB)")
-                        }
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color(.secondarySystemBackground))
+                        )
+                        // tighten row insets for a card-like appearance
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                     }
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .fill(Color(.secondarySystemBackground))
-                    )
-                    // tighten row insets for a card-like appearance
-                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                    .buttonStyle(PlainButtonStyle())
+                    .accessibilityAddTraits(.isButton)
                 }
 
                 Section("Neue Runde") {
