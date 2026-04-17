@@ -297,9 +297,14 @@ struct ContentView: View {
                     if runden.isEmpty {
                         Text("Keine Runden").foregroundStyle(.secondary)
                     } else {
-                        ForEach(runden, id: \.id) { runde in
+                        // Use enumerated indices so we can show a 1-based index next to each Runde
+                        ForEach(Array(runden.enumerated()), id: \.element.id) { index, runde in
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
+                                    // 1-based index prefix
+                                    Text("\(index + 1).")
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
                                     Text("\(runde.spielart.titel) x\(runde.faktor)")
                                         .font(.headline)
                                     Spacer()
@@ -353,6 +358,7 @@ struct ContentView: View {
                                  .tint(.blue)
                              }
                          }
+                         // Keep deletion working by relying on the original delete implementation
                          .onDelete(perform: delete)
                      }
                  }
