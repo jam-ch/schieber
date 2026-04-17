@@ -68,6 +68,9 @@ struct ContentView: View {
     @State private var exportURL: URL?
     @State private var showImporter = false
     @State private var showResetAlert = false
+    // Export error handling
+    @State private var showExportError = false
+    @State private var exportErrorMessage: String? = nil
 
     // Editing state
     @State private var editingRunde: Runde? = nil
@@ -470,6 +473,11 @@ struct ContentView: View {
                     Text("Export fehlgeschlagen")
                 }
             }
+            .alert("Export fehlgeschlagen", isPresented: $showExportError, actions: {
+                Button("OK", role: .cancel) { exportErrorMessage = nil }
+            }, message: {
+                Text(exportErrorMessage ?? "Unbekannter Fehler")
+            })
             .alert("Alle Runden löschen?", isPresented: $showResetAlert, actions: {
                 Button("Abbrechen", role: .cancel) {}
                 Button("Löschen", role: .destructive) {
@@ -523,10 +531,18 @@ struct ContentView: View {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("runden_export_\(Int(Date().timeIntervalSince1970)).json")
         do {
             try vm.exportJSON(to: tmp)
-            exportURL = tmp
-            showShareSheet = true
+            // Ensure file was actually written before presenting share sheet
+            if FileManager.default.fileExists(atPath: tmp.path) {
+                exportURL = tmp
+                showShareSheet = true
+            } else {
+                exportErrorMessage = "Export file not found after write: \(tmp.path)"
+                showExportError = true
+            }
         } catch {
-            print("Export failed: \(error)")
+            // Surface error to the user via alert for easier debugging
+            exportErrorMessage = "Export failed: \(error)"
+            showExportError = true
         }
     }
 
