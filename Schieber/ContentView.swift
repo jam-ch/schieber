@@ -15,7 +15,7 @@ enum Spielart: Int, CaseIterable, Identifiable {
 
     var titel: String {
         switch self {
-        case .normal: return "Normal"
+        case .normal: return "Einfach" // renamed from "Normal" to "Einfach"
         case .doppelt: return "Doppelt"
         case .obeabe: return "Obeabe"
         case .undeufe: return "Undeufe"
@@ -201,6 +201,8 @@ struct ContentView: View {
                             isMatch = false
                             // Ensure next new round defaults to Normal
                             spielart = .normal
+                            // Reset focus to first field so user can start typing the next score
+                            focusedField = .a
                         }
                      }
                       .disabled(!canAdd || roundSumError != nil)
