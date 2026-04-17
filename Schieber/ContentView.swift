@@ -111,28 +111,48 @@ struct ContentView: View {
                 let totalB = runden.map { $0.totalB }.reduce(0, +)
 
                 Section(header: Text("Spielstand")) {
-                    VStack(spacing: 8) {
-                        HStack {
-                            VStack(alignment: .leading) {
-                                Text(teamAName).font(.caption)
-                                Text("\(totalA)")
-                                    .font(.title)
-                                    .bold()
-                                    .accessibilityLabel("Spielstand \(teamAName)")
-                                    .accessibilityValue("\(totalA)")
-                            }
-                            Spacer()
-                            VStack(alignment: .leading) {
-                                Text(teamBName).font(.caption)
-                                Text("\(totalB)")
-                                    .font(.title)
-                                    .bold()
-                                    .accessibilityLabel("Spielstand \(teamBName)")
-                                    .accessibilityValue("\(totalB)")
-                            }
+                    // Compact scoreboard card for a smoother visual flow
+                    HStack(spacing: 16) {
+                        // Team A block (left-aligned)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(teamAName)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text("\(totalA)")
+                                .font(.system(size: 34, weight: .bold, design: .rounded))
+                                .accessibilityLabel("Spielstand \(teamAName)")
+                                .accessibilityValue("\(totalA)")
+                        }
+
+                        Spacer()
+
+                        // Center divider with optional label (keeps visual balance)
+                        VStack {
+                            Text("vs")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+
+                        Spacer()
+
+                        // Team B block (right-aligned)
+                        VStack(alignment: .trailing, spacing: 4) {
+                            Text(teamBName)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                            Text("\(totalB)")
+                                .font(.system(size: 34, weight: .bold, design: .rounded))
+                                .accessibilityLabel("Spielstand \(teamBName)")
+                                .accessibilityValue("\(totalB)")
                         }
                     }
-                    .padding(.vertical, 6)
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(.secondarySystemBackground))
+                    )
+                    // tighten row insets for a card-like appearance
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
                 }
 
                 Section("Neue Runde") {
