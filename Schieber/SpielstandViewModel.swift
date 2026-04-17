@@ -7,7 +7,7 @@ import SwiftData
 final class SpielstandViewModel: ObservableObject {
     private var modelContext: ModelContext?
 
-    let MAX_POINTS = 2500
+    let MAX_POINTS = 157
     let REQUIRED_SUM = 157
     let MATCH_BONUS = 100
 

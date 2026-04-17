@@ -140,6 +140,8 @@ struct ContentView: View {
                                     isAutoFilling = true
                                     punkteB = ""
                                     isAutoFilling = false
+                                    // no team has full points -> clear match
+                                    isMatch = false
                                     return
                                 }
                                 if let a = Int(new) {
@@ -149,6 +151,12 @@ struct ContentView: View {
                                         punkteB = String(b)
                                         isAutoFilling = false
                                     }
+                                }
+                                // Auto-activate match if a team reached REQUIRED_SUM, otherwise clear
+                                if let a = Int(new), a == vm.REQUIRED_SUM || Int(punkteB) == vm.REQUIRED_SUM {
+                                    isMatch = true
+                                } else {
+                                    isMatch = false
                                 }
                             }
                         if let err = punkteAError {
@@ -168,6 +176,8 @@ struct ContentView: View {
                                     isAutoFilling = true
                                     punkteA = ""
                                     isAutoFilling = false
+                                    // no team has full points -> clear match
+                                    isMatch = false
                                     return
                                 }
                                 if let b = Int(new) {
@@ -177,6 +187,12 @@ struct ContentView: View {
                                         punkteA = String(a)
                                         isAutoFilling = false
                                     }
+                                }
+                                // Auto-activate match if a team reached REQUIRED_SUM, otherwise clear
+                                if let b = Int(new), b == vm.REQUIRED_SUM || Int(punkteA) == vm.REQUIRED_SUM {
+                                    isMatch = true
+                                } else {
+                                    isMatch = false
                                 }
                             }
                         if let err = punkteBError {
@@ -358,6 +374,8 @@ struct ContentView: View {
                                             editIsAutoFilling = true
                                             editPunkteB = ""
                                             editIsAutoFilling = false
+                                            // no team has full points -> clear editMatch
+                                            editMatch = false
                                             return
                                         }
                                         if let a = Int(new) {
@@ -367,6 +385,12 @@ struct ContentView: View {
                                                 editPunkteB = String(b)
                                                 editIsAutoFilling = false
                                             }
+                                        }
+                                        // Auto-activate editMatch if a team reached REQUIRED_SUM, otherwise clear
+                                        if let a = Int(new), a == vm.REQUIRED_SUM || Int(editPunkteB) == vm.REQUIRED_SUM {
+                                            editMatch = true
+                                        } else {
+                                            editMatch = false
                                         }
                                     }
                                 TextField("Team B Punkte", text: $editPunkteB)
@@ -382,6 +406,8 @@ struct ContentView: View {
                                             editIsAutoFilling = true
                                             editPunkteA = ""
                                             editIsAutoFilling = false
+                                            // no team has full points -> clear editMatch
+                                            editMatch = false
                                             return
                                         }
                                         if let b = Int(new) {
@@ -391,6 +417,12 @@ struct ContentView: View {
                                                 editPunkteA = String(a)
                                                 editIsAutoFilling = false
                                             }
+                                        }
+                                        // Auto-activate editMatch if a team reached REQUIRED_SUM, otherwise clear
+                                        if let b = Int(new), b == vm.REQUIRED_SUM || Int(editPunkteA) == vm.REQUIRED_SUM {
+                                            editMatch = true
+                                        } else {
+                                            editMatch = false
                                         }
                                     }
                                  Picker("Spielart", selection: $editSpielart) {

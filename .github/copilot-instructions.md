@@ -1,0 +1,6 @@
+- Nach jeder Edit-Änderung: git add . --all
+- Generiere commit message: "Copilot: [kurze Beschreibung der Changes]"
+- Committe automatisch: git commit -m "..."
+- Bei Fehlern: git reset --soft HEAD~1 und retry
+- Commit-Größe: Max 10 Dateien pro Commit
+- Benutze Gitmoji für jeden Commit
