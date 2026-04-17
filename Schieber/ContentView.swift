@@ -301,8 +301,8 @@ struct ContentView: View {
                         ForEach(Array(runden.enumerated()), id: \.element.id) { index, runde in
                             VStack(alignment: .leading, spacing: 4) {
                                 HStack {
-                                    // 1-based index prefix
-                                    Text("\(index + 1).")
+                                    // Descending 1-based index prefix (newest first should have the highest number)
+                                    Text("\(runden.count - index).")
                                         .font(.subheadline)
                                         .foregroundColor(.secondary)
                                     Text("\(runde.spielart.titel) x\(runde.faktor)")
@@ -460,8 +460,8 @@ struct ContentView: View {
                                 Toggle("Match (Bonus +\(vm.MATCH_BONUS))", isOn: $editMatch)
                                     .accessibilityLabel("Match für diese Runde")
                              }
-                        }
-                        .navigationTitle("Runde bearbeiten")
+                        // Show the round's descending number in the sheet title (e.g. "Runde 4 bearbeiten")
+                        .navigationTitle(runden.firstIndex(where: { $0.id == r.id }).map { "Runde \(runden.count - $0) bearbeiten" } ?? "Runde bearbeiten")
                         .toolbar {
                             ToolbarItem(placement: .navigationBarLeading) {
                                 Button("Abbrechen") {
