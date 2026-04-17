@@ -387,6 +387,26 @@ struct ContentView: View {
                 if let r = editingRunde {
                     NavigationStack {
                         Form {
+                            // Inline action row so Cancel / Save are always visible on the edit sheet
+                            Section {
+                                HStack {
+                                    Button("Abbrechen") {
+                                        // cancel edits and dismiss sheet
+                                        editingRunde = nil
+                                    }
+                                    .foregroundColor(.red)
+
+                                    Spacer()
+
+                                    Button("Speichern") {
+                                        saveEditing()
+                                    }
+                                    .disabled(!canSaveEdit(for: r) || vm.validateRoundSum(editPunkteA, editPunkteB) != nil)
+                                    .buttonStyle(.borderedProminent)
+                                    .accessibilityLabel("Speichern")
+                                }
+                            }
+
                             Section("Bearbeiten") {
                                 TextField("Team A Punkte", text: $editPunkteA)
                                     .keyboardType(.numberPad)
