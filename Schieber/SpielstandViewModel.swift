@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 import SwiftUI
 import SwiftData
 
@@ -7,7 +7,7 @@ import SwiftData
 final class SpielstandViewModel: ObservableObject {
     private var modelContext: ModelContext?
 
-    let MAX_POINTS = 157
+    let MAX_STICH = 157
     let REQUIRED_SUM = 157
     let MATCH_BONUS = 100
 
@@ -15,99 +15,97 @@ final class SpielstandViewModel: ObservableObject {
         self.modelContext = context
     }
 
-    // Fetch persisted rounds directly in the view model for totals and operations
-    @Query(sort: [SortDescriptor(\Runde.createdAt, order: .reverse)])
-    private var runden: [Runde]
-
-    var gesamtA: Int { runden.map { $0.totalA }.reduce(0, +) }
-    var gesamtB: Int { runden.map { $0.totalB }.reduce(0, +) }
-
-    func validatePunkteField(_ value: String) -> String? {
+    func validateStichField(_ value: String) -> String? {
         if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Punkte erforderlich"
+            return "Stich erforderlich"
         }
         guard let v = Int(value) else {
             return "Nur Zahlen erlaubt"
         }
         if v < 0 {
-            return "Punkte dürfen nicht negativ sein"
+            return "Stich dürfen nicht negativ sein"
         }
-        if v > MAX_POINTS {
-            return "Maximal \(MAX_POINTS) Punkte erlaubt"
+        if v > MAX_STICH {
+            return "Maximal \(MAX_STICH) Stich erlaubt"
         }
         return nil
     }
 
-    /// Validate that the sum of both teams' raw points equals the required total (157).
-    /// Returns an error message when invalid, or nil when OK. If either input isn't a valid Int yet, returns nil (per-field errors handle that).
-    func validateRoundSum(_ punkteA: String, _ punkteB: String) -> String? {
-        guard let a = Int(punkteA), let b = Int(punkteB) else { return nil }
-        let sum = a + b
+    /// Validates a Weis field. Empty is allowed (treated as 0). Must be a non-negative integer.
+    func validateWeisField(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty { return nil }
+        guard let v = Int(trimmed) else {
+            return "Nur Zahlen erlaubt"
+        }
+        if v < 0 {
+            return "Weis dürfen nicht negativ sein"
+        }
+        return nil
+    }
+
+    func validateRoundSum(_ stich: [String], teamCount: Int) -> String? {
+        let values = stich.prefix(teamCount).compactMap { Int($0) }
+        guard values.count == teamCount else { return nil }
+        let sum = values.reduce(0, +)
         if sum != REQUIRED_SUM {
             return "Summe muss \(REQUIRED_SUM) Punkte sein (aktuell: \(sum))"
         }
         return nil
     }
 
-    func canAdd(punkteA: String, punkteB: String) -> Bool {
-        // require individual fields valid
-        guard validatePunkteField(punkteA) == nil, validatePunkteField(punkteB) == nil else { return false }
-        // require parsable ints
-        guard let a = Int(punkteA), let b = Int(punkteB) else { return false }
-        // require sum equals REQUIRED_SUM
-        return a + b == REQUIRED_SUM
+    func canAdd(stich: [String], weis: [String], teamCount: Int) -> Bool {
+        let activeStich = Array(stich.prefix(teamCount))
+        guard activeStich.allSatisfy({ validateStichField($0) == nil }) else { return false }
+        let activeWeis = Array(weis.prefix(teamCount))
+        guard activeWeis.allSatisfy({ validateWeisField($0) == nil }) else { return false }
+        let stichValues = activeStich.compactMap { Int($0) }
+        guard stichValues.count == teamCount else { return false }
+        return stichValues.reduce(0, +) == REQUIRED_SUM
     }
 
     @discardableResult
-    func addRunde(punkteA: String, punkteB: String, spielart: Spielart, match: Bool = false) -> Bool {
+    func addRunde(stich: [String], weis: [String], teamCount: Int, spielart: Spielart, match: Bool = false) -> Bool {
         guard let ctx = modelContext else { return false }
-        guard let a = Int(punkteA), let b = Int(punkteB) else { return false }
+        let stichValues = stich.prefix(teamCount).compactMap { Int($0) }
+        guard stichValues.count == teamCount else { return false }
+        guard stichValues.reduce(0, +) == REQUIRED_SUM else { return false }
 
-        // Enforce sum invariant at insertion time as well
-        guard a + b == REQUIRED_SUM else { return false }
+        let weisValues = (0..<teamCount).map { i -> Int in
+            let trimmed = weis[i].trimmingCharacters(in: .whitespacesAndNewlines)
+            return Int(trimmed) ?? 0
+        }
 
-        let r = Runde(punkteTeamA: a, punkteTeamB: b, spielartRaw: spielart.rawValue)
-        // apply match bonus if requested — bonus to the team whose raw points == REQUIRED_SUM
+        let r = Runde(stich: stichValues, weis: weisValues, spielartRaw: spielart.rawValue, teamCount: teamCount)
         if match {
-            let factor = r.faktor
-            let appliedBonus = MATCH_BONUS * factor
-            if a == REQUIRED_SUM {
-                r.bonusA = appliedBonus
-            } else if b == REQUIRED_SUM {
-                r.bonusB = appliedBonus
+            let appliedBonus = MATCH_BONUS * r.faktor
+            if let matchIndex = stichValues.firstIndex(where: { $0 == REQUIRED_SUM }) {
+                r.setBonus(appliedBonus, forTeam: matchIndex)
             }
         }
         ctx.insert(r)
         return true
     }
 
-    func updateRunde(_ runde: Runde, punkteA: Int, punkteB: Int, spielart: Spielart, match: Bool = false) {
-        // Optionally enforce sum here as well; caller should validate before calling
-        guard punkteA + punkteB == REQUIRED_SUM else { return }
-        runde.punkteTeamA = punkteA
-        runde.punkteTeamB = punkteB
-        runde.spielart = spielart
-        // set/reset match bonus as requested
-        let factor = runde.faktor
-        let appliedBonus = MATCH_BONUS * factor
-        if match {
-            if punkteA == REQUIRED_SUM {
-                runde.bonusA = appliedBonus
-                runde.bonusB = 0
-            } else if punkteB == REQUIRED_SUM {
-                runde.bonusB = appliedBonus
-                runde.bonusA = 0
-            } else {
-                // no team has raw 157 — clear bonuses
-                runde.bonusA = 0
-                runde.bonusB = 0
-            }
-        } else {
-            // if match flag not set, ensure bonuses are cleared
-            runde.bonusA = 0
-            runde.bonusB = 0
+    func updateRunde(_ runde: Runde, stich: [Int], weis: [Int], spielart: Spielart, match: Bool = false) {
+        let activeStich = Array(stich.prefix(runde.teamCount))
+        guard activeStich.reduce(0, +) == REQUIRED_SUM else { return }
+
+        for i in 0..<runde.teamCount {
+            runde.setStich(activeStich[i], forTeam: i)
+            runde.setWeis(weis.indices.contains(i) ? weis[i] : 0, forTeam: i)
         }
-        // SwiftData observes model changes automatically
+        runde.spielart = spielart
+
+        for i in 0..<4 {
+            runde.setBonus(0, forTeam: i)
+        }
+        if match {
+            let appliedBonus = MATCH_BONUS * runde.faktor
+            if let matchIndex = activeStich.firstIndex(where: { $0 == REQUIRED_SUM }) {
+                runde.setBonus(appliedBonus, forTeam: matchIndex)
+            }
+        }
     }
 
     func delete(runde: Runde) {
@@ -116,7 +114,6 @@ final class SpielstandViewModel: ObservableObject {
 
     func resetAll() {
         guard let ctx = modelContext else { return }
-        // Fetch all Runde objects from the stored model context and delete them explicitly.
         do {
             let all: [Runde] = try ctx.fetch(FetchDescriptor<Runde>())
             for r in all {
@@ -127,32 +124,4 @@ final class SpielstandViewModel: ObservableObject {
         }
     }
 
-    // Codable DTO for export/import
-    private struct RundeDTO: Codable {
-        let id: UUID
-        let punkteTeamA: Int
-        let punkteTeamB: Int
-        let bonusA: Int
-        let bonusB: Int
-        let spielartRaw: Int
-        let createdAt: Date
-    }
-
-    func exportJSON(to url: URL) throws {
-        let dtos = runden.map { RundeDTO(id: $0.id, punkteTeamA: $0.punkteTeamA, punkteTeamB: $0.punkteTeamB, bonusA: $0.bonusA, bonusB: $0.bonusB, spielartRaw: $0.spielartRaw, createdAt: $0.createdAt) }
-        let data = try JSONEncoder().encode(dtos)
-        try data.write(to: url)
-    }
-
-    func importJSON(from url: URL) throws {
-        guard let ctx = modelContext else { return }
-        let data = try Data(contentsOf: url)
-        let dtos = try JSONDecoder().decode([RundeDTO].self, from: data)
-        for dto in dtos {
-            let r = Runde(punkteTeamA: dto.punkteTeamA, punkteTeamB: dto.punkteTeamB, spielartRaw: dto.spielartRaw, createdAt: dto.createdAt)
-            r.bonusA = dto.bonusA
-            r.bonusB = dto.bonusB
-            ctx.insert(r)
-        }
-    }
 }

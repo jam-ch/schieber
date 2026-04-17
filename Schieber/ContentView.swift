@@ -1,5 +1,4 @@
 import SwiftUI
-import Combine
 import SwiftData
 
 // MARK: - Models
@@ -15,13 +14,27 @@ enum Spielart: Int, CaseIterable, Identifiable {
 
     var titel: String {
         switch self {
-        case .normal: return "Einfach" // renamed from "Normal" to "Einfach"
+        case .normal: return "Einfach"
         case .doppelt: return "Doppelt"
         case .obeabe: return "ObeAbe"
         case .undeufe: return "UndeUfe"
         case .slalom: return "Slalom"
         }
     }
+}
+
+private let teamLetters = ["A", "B", "C", "D"]
+
+// MARK: - Focus
+
+enum FocusField: Hashable {
+    case stich(Int)
+    case weis(Int)
+}
+
+enum EditFocusField: Hashable {
+    case stich(Int)
+    case weis(Int)
 }
 
 // MARK: - Views
@@ -32,61 +45,80 @@ struct ContentView: View {
 
     @StateObject private var vm = SpielstandViewModel()
 
-    // Persisted team names
+    // Persisted team count and names
+    @AppStorage("teamCount") private var teamCount: Int = 2
     @AppStorage("teamAName") private var teamAName: String = "Team A"
     @AppStorage("teamBName") private var teamBName: String = "Team B"
+    @AppStorage("teamCName") private var teamCName: String = "Team C"
+    @AppStorage("teamDName") private var teamDName: String = "Team D"
 
-    @State private var punkteA = ""
-    @State private var punkteB = ""
-    // Avoid feedback loops when auto-filling the other field
-    @State private var isAutoFilling = false
-    // Match checkbox for New Round
+    // New-round input
+    @State private var stich: [String] = ["", "", "", ""]
+    @State private var weis: [String] = ["", "", "", ""]
     @State private var isMatch = false
-
     @State private var spielart: Spielart = .normal
+    @FocusState private var focusedField: FocusField?
 
-    @FocusState private var focusedField: Field?
-
-    // Editing auto-fill flag
-    @State private var editIsAutoFilling = false
-    // Editing match flag
+    // Edit sheet state
+    @State private var editingRunde: Runde? = nil
+    @State private var editStich: [String] = ["", "", "", ""]
+    @State private var editWeis: [String] = ["", "", "", ""]
     @State private var editMatch = false
+    @State private var editSpielart: Spielart = .normal
+    @FocusState private var editFocusedField: EditFocusField?
 
     @State private var showResetAlert = false
-    // Scoreboard expanded/collapsed state
-    @State private var scoreboardExpanded: Bool = true
-
-    // Editing state
-    @State private var editingRunde: Runde? = nil
-    @State private var editPunkteA = ""
-    @State private var editPunkteB = ""
-    @State private var editSpielart: Spielart = .normal
-    @FocusState private var editFocusedField: EditField?
-
-    // Delete confirmation
+    @State private var scoreboardExpanded: Bool = false
     @State private var pendingDelete: Runde? = nil
     @State private var showDeleteAlert = false
 
-    private var punkteAInt: Int? { Int(punkteA) }
-    private var punkteBInt: Int? { Int(punkteB) }
+    // MARK: - Team name helpers
 
-    private var punkteAError: String? { vm.validatePunkteField(punkteA) }
-    private var punkteBError: String? { vm.validatePunkteField(punkteB) }
-    private var roundSumError: String? { vm.validateRoundSum(punkteA, punkteB) }
-
-    private var canAdd: Bool { vm.canAdd(punkteA: punkteA, punkteB: punkteB) }
-
-    enum Field: Hashable {
-        case a
-        case b
+    private var teamNames: [String] {
+        [teamAName, teamBName, teamCName, teamDName]
     }
 
-    enum EditField: Hashable {
-        case a
-        case b
+    private func teamNameBinding(for index: Int) -> Binding<String> {
+        switch index {
+        case 0: return $teamAName
+        case 1: return $teamBName
+        case 2: return $teamCName
+        case 3: return $teamDName
+        default: return .constant("")
+        }
     }
 
-    // Date formatter for round display
+    private func stichBinding(at index: Int) -> Binding<String> {
+        Binding(get: { stich[index] }, set: { stich[index] = $0 })
+    }
+
+    private func weisBinding(at index: Int) -> Binding<String> {
+        Binding(get: { weis[index] }, set: { weis[index] = $0 })
+    }
+
+    private func editStichBinding(at index: Int) -> Binding<String> {
+        Binding(get: { editStich[index] }, set: { editStich[index] = $0 })
+    }
+
+    private func editWeisBinding(at index: Int) -> Binding<String> {
+        Binding(get: { editWeis[index] }, set: { editWeis[index] = $0 })
+    }
+
+    // MARK: - Validation helpers
+
+    private var roundSumError: String? {
+        vm.validateRoundSum(stich, teamCount: teamCount)
+    }
+
+    private var canAdd: Bool {
+        vm.canAdd(stich: stich, weis: weis, teamCount: teamCount)
+    }
+
+    private var editRoundSumError: String? {
+        guard let r = editingRunde else { return nil }
+        return vm.validateRoundSum(editStich, teamCount: r.teamCount)
+    }
+
     private static let dateFormatter: DateFormatter = {
         let df = DateFormatter()
         df.dateStyle = .short
@@ -94,197 +126,14 @@ struct ContentView: View {
         return df
     }()
 
+    // MARK: - Body
+
     var body: some View {
         NavigationStack {
             Form {
-                Section("Teams") {
-                    VStack(alignment: .leading, spacing: 8) {
-                        TextField("Name für Team A", text: $teamAName)
-                            .disableAutocorrection(true)
-                            .textInputAutocapitalization(.words)
-                        TextField("Name für Team B", text: $teamBName)
-                            .disableAutocorrection(true)
-                            .textInputAutocapitalization(.words)
-                    }
-                }
-
-                // Totals computed directly from persisted rounds to ensure correctness
-                let totalA = runden.map { $0.totalA }.reduce(0, +)
-                let totalB = runden.map { $0.totalB }.reduce(0, +)
-
-                Section(header: Text("Spielstand")) {
-                    // Tappable scoreboard card: toggles expanded/collapsed view
-                    Button(action: {
-                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                            scoreboardExpanded.toggle()
-                        }
-                    }) {
-                        VStack(spacing: 8) {
-                            HStack(spacing: 16) {
-                                // Team A block (left-aligned)
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(teamAName)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Text("\(totalA)")
-                                        .font(.system(size: scoreboardExpanded ? 34 : 24, weight: .bold, design: .rounded))
-                                        .accessibilityLabel("Spielstand \(teamAName)")
-                                        .accessibilityValue("\(totalA)")
-                                }
-
-                                Spacer()
-
-                                // Center divider with optional label (keeps visual balance)
-                                VStack {
-                                    Text("vs")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-
-                                Spacer()
-
-                                // Team B block (right-aligned)
-                                VStack(alignment: .trailing, spacing: 4) {
-                                    Text(teamBName)
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    Text("\(totalB)")
-                                        .font(.system(size: scoreboardExpanded ? 34 : 24, weight: .bold, design: .rounded))
-                                        .accessibilityLabel("Spielstand \(teamBName)")
-                                        .accessibilityValue("\(totalB)")
-                                }
-                            }
-
-                            // Expanded details
-                            if scoreboardExpanded {
-                                VStack(spacing: 4) {
-                                    HStack {
-                                        Text("Runden: \(runden.count)")
-                                            .font(.caption2)
-                                            .foregroundColor(.secondary)
-                                        Spacer()
-                                        if let last = runden.first {
-                                            Text(Self.dateFormatter.string(from: last.createdAt))
-                                                .font(.caption2)
-                                                .foregroundColor(.secondary)
-                                        }
-                                    }
-                                }
-                                .transition(.opacity.combined(with: .move(edge: .top)))
-                            }
-                        }
-                        .padding(12)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                                .fill(Color(.secondarySystemBackground))
-                        )
-                        // tighten row insets for a card-like appearance
-                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .accessibilityAddTraits(.isButton)
-                }
-
-                Section("Neue Runde") {
-                    VStack(alignment: .leading, spacing: 6) {
-                        TextField("\(teamAName) Punkte", text: $punkteA)
-                            .keyboardType(.numberPad)
-                            .focused($focusedField, equals: .a)
-                            .accessibilityLabel("\(teamAName) Punkte")
-                            .onChange(of: punkteA) { _, new in
-                                guard !isAutoFilling else { return }
-                                // Only auto-fill when the user is editing this field
-                                guard focusedField == .a else { return }
-                                // If empty, clear the other field
-                                if new.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    isAutoFilling = true
-                                    punkteB = ""
-                                    isAutoFilling = false
-                                    // no team has full points -> clear match
-                                    isMatch = false
-                                    return
-                                }
-                                if let a = Int(new) {
-                                    let b = vm.REQUIRED_SUM - a
-                                    if b >= 0 && b <= vm.MAX_POINTS {
-                                        isAutoFilling = true
-                                        punkteB = String(b)
-                                        isAutoFilling = false
-                                    }
-                                }
-                                // Auto-activate match if a team reached REQUIRED_SUM, otherwise clear
-                                if let a = Int(new), a == vm.REQUIRED_SUM || Int(punkteB) == vm.REQUIRED_SUM {
-                                    isMatch = true
-                                } else {
-                                    isMatch = false
-                                }
-                            }
-                        if let err = punkteAError {
-                            Text(err).foregroundColor(.red).font(.caption)
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        TextField("\(teamBName) Punkte", text: $punkteB)
-                            .keyboardType(.numberPad)
-                            .focused($focusedField, equals: .b)
-                            .accessibilityLabel("\(teamBName) Punkte")
-                            .onChange(of: punkteB) { _, new in
-                                guard !isAutoFilling else { return }
-                                guard focusedField == .b else { return }
-                                if new.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                    isAutoFilling = true
-                                    punkteA = ""
-                                    isAutoFilling = false
-                                    // no team has full points -> clear match
-                                    isMatch = false
-                                    return
-                                }
-                                if let b = Int(new) {
-                                    let a = vm.REQUIRED_SUM - b
-                                    if a >= 0 && a <= vm.MAX_POINTS {
-                                        isAutoFilling = true
-                                        punkteA = String(a)
-                                        isAutoFilling = false
-                                    }
-                                }
-                                // Auto-activate match if a team reached REQUIRED_SUM, otherwise clear
-                                if let b = Int(new), b == vm.REQUIRED_SUM || Int(punkteA) == vm.REQUIRED_SUM {
-                                    isMatch = true
-                                } else {
-                                    isMatch = false
-                                }
-                            }
-                        if let err = punkteBError {
-                            Text(err).foregroundColor(.red).font(.caption)
-                        }
-                    }
-
-                    Picker("Spielart", selection: $spielart) {
-                        ForEach(Spielart.allCases) { art in
-                            Text("\(art.titel) (x\(art.rawValue))").tag(art)
-                        }
-                    }
-
-                    Toggle("Match (Bonus +\(vm.MATCH_BONUS))", isOn: $isMatch)
-                        .accessibilityLabel("Match aktivieren")
-
-                     Button("Runde hinzufügen") {
-                        if vm.addRunde(punkteA: punkteA, punkteB: punkteB, spielart: spielart, match: isMatch) {
-                            punkteA = ""
-                            punkteB = ""
-                            isMatch = false
-                            // Ensure next new round defaults to Normal
-                            spielart = .normal
-                            // Reset focus to first field so user can start typing the next score
-                            focusedField = .a
-                        }
-                     }
-                      .disabled(!canAdd || roundSumError != nil)
-                      .accessibilityLabel("Runde hinzufügen")
-                      .accessibilityHint("Fügt eine neue Runde mit den eingegebenen Punkten hinzu")
-                 }
-
+                teamsSection
+                scoreboardSection
+                neueRundeSection
                 if let sumErr = roundSumError {
                     Section {
                         Text(sumErr)
@@ -292,76 +141,7 @@ struct ContentView: View {
                             .font(.caption)
                     }
                 }
-
-                Section("Runden") {
-                    if runden.isEmpty {
-                        Text("Keine Runden").foregroundStyle(.secondary)
-                    } else {
-                        // Use enumerated indices so we can show a 1-based index next to each Runde
-                        ForEach(Array(runden.enumerated()), id: \.element.id) { index, runde in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    // Descending 1-based index prefix (newest first should have the highest number)
-                                    Text("\(runden.count - index).")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    Text("\(runde.spielart.titel) x\(runde.faktor)")
-                                        .font(.headline)
-                                    Spacer()
-                                    Text(Self.dateFormatter.string(from: runde.createdAt))
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                }
-                                // Show per-team totals and optional Match bonus badge
-                                HStack {
-                                    VStack(alignment: .leading) {
-                                        HStack(spacing: 6) {
-                                            Text("\(teamAName): \(runde.totalA)")
-                                                .font(.subheadline)
-                                            if runde.bonusA > 0 {
-                                                Text("+\(runde.bonusA) Match")
-                                                    .font(.caption2)
-                                                    .foregroundColor(.green)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2)
-                                                    .background(Capsule().fill(Color.green.opacity(0.15)))
-                                            }
-                                        }
-                                    }
-                                    Spacer()
-                                    VStack(alignment: .trailing) {
-                                        HStack(spacing: 6) {
-                                            if runde.bonusB > 0 {
-                                                Text("+\(runde.bonusB) Match")
-                                                    .font(.caption2)
-                                                    .foregroundColor(.green)
-                                                    .padding(.horizontal, 6)
-                                                    .padding(.vertical, 2)
-                                                    .background(Capsule().fill(Color.green.opacity(0.15)))
-                                            }
-                                            Text("\(teamBName): \(runde.totalB)")
-                                                .font(.subheadline)
-                                        }
-                                    }
-                                }
-                                .foregroundColor(.primary)
-                             }
-                             .padding(.vertical, 6)
-                             .swipeActions(edge: .trailing) {
-                                 Button("Löschen", role: .destructive) {
-                                     pendingDelete = runde
-                                     showDeleteAlert = true
-                                 }
-                                 Button("Bearbeiten") {
-                                     startEditing(runde)
-                                 }
-                                 .tint(.blue)
-                             }
-                         }
-                         // Keep deletion working by relying on the original delete implementation
-                         .onDelete(perform: delete)
-                     }
-                 }
+                rundenSection
             }
             .navigationTitle("Jass Tafel")
             .toolbar {
@@ -374,7 +154,6 @@ struct ContentView: View {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
-
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
                     Button("Fertig") {
@@ -384,133 +163,7 @@ struct ContentView: View {
                 }
             }
             .sheet(isPresented: Binding(get: { editingRunde != nil }, set: { if !$0 { editingRunde = nil } })) {
-                if let r = editingRunde {
-                    NavigationStack {
-                        Form {
-                            // Inline action row so Cancel / Save are always visible on the edit sheet
-                            Section {
-                                HStack {
-                                    Button("Abbrechen") {
-                                        // cancel edits and dismiss sheet
-                                        editingRunde = nil
-                                    }
-                                    .foregroundColor(.red)
-
-                                    Spacer()
-
-                                    Button("Speichern") {
-                                        saveEditing()
-                                    }
-                                    .disabled(!canSaveEdit(for: r) || vm.validateRoundSum(editPunkteA, editPunkteB) != nil)
-                                    .buttonStyle(.borderedProminent)
-                                    .accessibilityLabel("Speichern")
-                                }
-                            }
-
-                            Section("Bearbeiten") {
-                                TextField("Team A Punkte", text: $editPunkteA)
-                                    .keyboardType(.numberPad)
-                                    .focused($editFocusedField, equals: .a)
-                                    .submitLabel(.done)
-                                    .disableAutocorrection(true)
-                                    .accessibilityLabel("Team A Punkte bearbeiten")
-                                    .onChange(of: editPunkteA) { _, new in
-                                        guard !editIsAutoFilling else { return }
-                                        guard editFocusedField == .a else { return }
-                                        if new.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                            editIsAutoFilling = true
-                                            editPunkteB = ""
-                                            editIsAutoFilling = false
-                                            // no team has full points -> clear editMatch
-                                            editMatch = false
-                                            return
-                                        }
-                                        if let a = Int(new) {
-                                            let b = vm.REQUIRED_SUM - a
-                                            if b >= 0 && b <= vm.MAX_POINTS {
-                                                editIsAutoFilling = true
-                                                editPunkteB = String(b)
-                                                editIsAutoFilling = false
-                                            }
-                                        }
-                                        // Auto-activate editMatch if a team reached REQUIRED_SUM, otherwise clear
-                                        if let a = Int(new), a == vm.REQUIRED_SUM || Int(editPunkteB) == vm.REQUIRED_SUM {
-                                            editMatch = true
-                                        } else {
-                                            editMatch = false
-                                        }
-                                    }
-                                TextField("Team B Punkte", text: $editPunkteB)
-                                    .keyboardType(.numberPad)
-                                    .focused($editFocusedField, equals: .b)
-                                    .submitLabel(.done)
-                                    .disableAutocorrection(true)
-                                    .accessibilityLabel("Team B Punkte bearbeiten")
-                                    .onChange(of: editPunkteB) { _, new in
-                                        guard !editIsAutoFilling else { return }
-                                        guard editFocusedField == .b else { return }
-                                        if new.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                                            editIsAutoFilling = true
-                                            editPunkteA = ""
-                                            editIsAutoFilling = false
-                                            // no team has full points -> clear editMatch
-                                            editMatch = false
-                                            return
-                                        }
-                                        if let b = Int(new) {
-                                            let a = vm.REQUIRED_SUM - b
-                                            if a >= 0 && a <= vm.MAX_POINTS {
-                                                editIsAutoFilling = true
-                                                editPunkteA = String(a)
-                                                editIsAutoFilling = false
-                                            }
-                                        }
-                                        // Auto-activate editMatch if a team reached REQUIRED_SUM, otherwise clear
-                                        if let b = Int(new), b == vm.REQUIRED_SUM || Int(editPunkteA) == vm.REQUIRED_SUM {
-                                            editMatch = true
-                                        } else {
-                                            editMatch = false
-                                        }
-                                    }
-                                 Picker("Spielart", selection: $editSpielart) {
-                                     ForEach(Spielart.allCases) { art in
-                                         Text("\(art.titel)").tag(art)
-                                     }
-                                 }
-                                Toggle("Match (Bonus +\(vm.MATCH_BONUS))", isOn: $editMatch)
-                                    .accessibilityLabel("Match für diese Runde")
-                             }
-                        } // end Form
-                    } // end NavigationStack
-                    // Show the round's descending number in the sheet title (e.g. "Runde 4 bearbeiten")
-                    .navigationTitle(runden.firstIndex(where: { $0.id == r.id }).map { "Runde \(runden.count - $0) bearbeiten" } ?? "Runde bearbeiten")
-                    .toolbar {
-                        // Use standard sheet placements so buttons appear reliably on modal sheets
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Abbrechen") {
-                                editingRunde = nil
-                            }
-                        }
-                        ToolbarItem(placement: .confirmationAction) {
-                            Button("Speichern") {
-                                saveEditing()
-                            }
-                            .disabled(!canSaveEdit(for: r) || vm.validateRoundSum(editPunkteA, editPunkteB) != nil)
-                        }
-                    }
-                    .onAppear {
-                        // initialize edit fields
-                        editPunkteA = String(r.punkteTeamA)
-                        editPunkteB = String(r.punkteTeamB)
-                        editSpielart = r.spielart
-                        // initialize match flag from existing bonuses using the multiplier (MATCH_BONUS * factor)
-                        let expected = vm.MATCH_BONUS * r.faktor
-                        editMatch = (r.bonusA == expected) || (r.bonusB == expected)
-                    }
-                } else {
-                    // fallback empty view
-                    EmptyView()
-                }
+                editSheet
             }
             .alert("Alle Runden löschen?", isPresented: $showResetAlert, actions: {
                 Button("Abbrechen", role: .cancel) {}
@@ -536,35 +189,418 @@ struct ContentView: View {
             .onAppear {
                 vm.setContext(modelContext)
             }
+            .onChange(of: teamCount) { _, newCount in
+                for i in newCount..<4 {
+                    stich[i] = ""
+                    weis[i] = ""
+                }
+            }
         }
     }
+
+    // MARK: - Teams Section
+
+    private var teamsSection: some View {
+        Section("Teams") {
+            ForEach(0..<teamCount, id: \.self) { i in
+                HStack {
+                    TextField("Name für Team \(teamLetters[i])", text: teamNameBinding(for: i))
+                        .disableAutocorrection(true)
+                        .textInputAutocapitalization(.words)
+                    if teamCount > 2 && i == teamCount - 1 {
+                        Button {
+                            teamCount -= 1
+                        } label: {
+                            Image(systemName: "minus.circle.fill")
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if teamCount < 4 {
+                Button {
+                    teamCount += 1
+                } label: {
+                    Label("Team hinzufügen", systemImage: "plus.circle")
+                }
+            }
+        }
+    }
+
+    // MARK: - Scoreboard Section
+
+    private var scoreboardSection: some View {
+        Section(header: Text("Spielstand")) {
+            Button(action: {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                    scoreboardExpanded.toggle()
+                }
+            }) {
+                VStack(spacing: 8) {
+                    let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: min(teamCount, 2))
+                    LazyVGrid(columns: columns, spacing: 12) {
+                        ForEach(0..<teamCount, id: \.self) { i in
+                            let total = runden.map { $0.total(forTeam: i) }.reduce(0, +)
+                            VStack(spacing: 4) {
+                                Text(teamNames[i])
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text("\(total)")
+                                    .font(.system(size: scoreboardExpanded ? 34 : 24, weight: .bold, design: .rounded))
+                                    .accessibilityLabel("Spielstand \(teamNames[i])")
+                                    .accessibilityValue("\(total)")
+                            }
+                        }
+                    }
+
+                    if scoreboardExpanded {
+                        VStack(spacing: 4) {
+                            HStack {
+                                Text("Runden: \(runden.count)")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                                Spacer()
+                                if let last = runden.first {
+                                    Text(Self.dateFormatter.string(from: last.createdAt))
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color(.secondarySystemBackground))
+                )
+                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+            }
+            .buttonStyle(PlainButtonStyle())
+            .accessibilityAddTraits(.isButton)
+        }
+    }
+
+    // MARK: - Neue Runde Section
+
+    private var neueRundeSection: some View {
+        Section("Neue Runde") {
+            ForEach(0..<teamCount, id: \.self) { i in
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(teamNames[i])
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            TextField("Stich", text: stichBinding(at: i))
+                                .keyboardType(.numberPad)
+                                .focused($focusedField, equals: .stich(i))
+                            if let err = vm.validateStichField(stich[i]) {
+                                Text(err).foregroundColor(.red).font(.caption2)
+                            }
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            TextField("Weis", text: weisBinding(at: i))
+                                .keyboardType(.numberPad)
+                                .focused($focusedField, equals: .weis(i))
+                            if let err = vm.validateWeisField(weis[i]) {
+                                Text(err).foregroundColor(.red).font(.caption2)
+                            }
+                        }
+                    }
+                }
+            }
+            .onChange(of: stich) { _, _ in
+                guard case .stich(let idx) = focusedField, idx < teamCount else { return }
+                handleAutoFill(changedIndex: idx, newValue: stich[idx])
+            }
+
+            Picker("Spielart", selection: $spielart) {
+                ForEach(Spielart.allCases) { art in
+                    Text("\(art.titel) (x\(art.rawValue))").tag(art)
+                }
+            }
+
+            Toggle("Match (Bonus +\(vm.MATCH_BONUS))", isOn: $isMatch)
+                .accessibilityLabel("Match aktivieren")
+
+            Button("Runde hinzufügen") {
+                if vm.addRunde(stich: stich, weis: weis, teamCount: teamCount, spielart: spielart, match: isMatch) {
+                    stich = ["", "", "", ""]
+                    weis = ["", "", "", ""]
+                    isMatch = false
+                    spielart = .normal
+                    focusedField = .stich(0)
+                }
+            }
+            .disabled(!canAdd || roundSumError != nil)
+            .accessibilityLabel("Runde hinzufügen")
+            .accessibilityHint("Fügt eine neue Runde mit den eingegebenen Punkten hinzu")
+        }
+    }
+
+    // MARK: - Runden Section
+
+    private var rundenSection: some View {
+        Section("Runden") {
+            if runden.isEmpty {
+                Text("Keine Runden").foregroundStyle(.secondary)
+            } else {
+                ForEach(Array(runden.enumerated()), id: \.element.id) { index, runde in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("\(runden.count - index).")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                            Text("\(runde.spielart.titel) x\(runde.faktor)")
+                                .font(.headline)
+                            Spacer()
+                            Text(Self.dateFormatter.string(from: runde.createdAt))
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        let roundTeamCount = runde.teamCount
+                        let columns = Array(repeating: GridItem(.flexible()), count: min(roundTeamCount, 2))
+                        LazyVGrid(columns: columns, alignment: .leading, spacing: 4) {
+                            ForEach(0..<roundTeamCount, id: \.self) { i in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    HStack(spacing: 6) {
+                                        Text("\(teamNames[i]): \(runde.total(forTeam: i))")
+                                            .font(.subheadline)
+                                        if runde.bonus(forTeam: i) > 0 {
+                                            Text("+\(runde.bonus(forTeam: i)) Match")
+                                                .font(.caption2)
+                                                .foregroundColor(.green)
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 2)
+                                                .background(Capsule().fill(Color.green.opacity(0.15)))
+                                        }
+                                    }
+                                    if runde.weis(forTeam: i) > 0 {
+                                        Text("S:\(runde.stich(forTeam: i)) W:\(runde.weis(forTeam: i))")
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                        .foregroundColor(.primary)
+                    }
+                    .padding(.vertical, 6)
+                    .swipeActions(edge: .trailing) {
+                        Button("Löschen", role: .destructive) {
+                            pendingDelete = runde
+                            showDeleteAlert = true
+                        }
+                        Button("Bearbeiten") {
+                            editingRunde = runde
+                        }
+                        .tint(.blue)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Edit Sheet
+
+    @ViewBuilder
+    private var editSheet: some View {
+        if let r = editingRunde {
+            NavigationStack {
+                Form {
+                    Section("Bearbeiten") {
+                        ForEach(0..<r.teamCount, id: \.self) { i in
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(teamNames[i])
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                HStack(spacing: 8) {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        TextField("Stich", text: editStichBinding(at: i))
+                                            .keyboardType(.numberPad)
+                                            .focused($editFocusedField, equals: .stich(i))
+                                        if let err = vm.validateStichField(editStich[i]) {
+                                            Text(err).foregroundColor(.red).font(.caption2)
+                                        }
+                                    }
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        TextField("Weis", text: editWeisBinding(at: i))
+                                            .keyboardType(.numberPad)
+                                            .focused($editFocusedField, equals: .weis(i))
+                                        if let err = vm.validateWeisField(editWeis[i]) {
+                                            Text(err).foregroundColor(.red).font(.caption2)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        .onChange(of: editStich) { _, _ in
+                            guard case .stich(let idx) = editFocusedField, idx < r.teamCount else { return }
+                            handleEditAutoFill(changedIndex: idx, newValue: editStich[idx], roundTeamCount: r.teamCount)
+                        }
+                        Picker("Spielart", selection: $editSpielart) {
+                            ForEach(Spielart.allCases) { art in
+                                Text("\(art.titel) (x\(art.rawValue))").tag(art)
+                            }
+                        }
+                        Toggle("Match (Bonus +\(vm.MATCH_BONUS))", isOn: $editMatch)
+                            .accessibilityLabel("Match für diese Runde")
+                    }
+                    if let sumErr = editRoundSumError {
+                        Section {
+                            Text(sumErr)
+                                .foregroundColor(.red)
+                                .font(.caption)
+                        }
+                    }
+                }
+                .navigationTitle(runden.firstIndex(where: { $0.id == r.id }).map { "Runde \(runden.count - $0) bearbeiten" } ?? "Runde bearbeiten")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Abbrechen") {
+                            editingRunde = nil
+                        }
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Speichern") {
+                            saveEditing()
+                        }
+                        .disabled(!canSaveEdit(for: r) || editRoundSumError != nil)
+                    }
+                }
+                .onAppear {
+                    for i in 0..<r.teamCount {
+                        editStich[i] = String(r.stich(forTeam: i))
+                        let w = r.weis(forTeam: i)
+                        editWeis[i] = w > 0 ? String(w) : ""
+                    }
+                    editSpielart = r.spielart
+                    let expected = vm.MATCH_BONUS * r.faktor
+                    editMatch = (0..<r.teamCount).contains { r.bonus(forTeam: $0) == expected }
+                }
+            }
+        } else {
+            EmptyView()
+        }
+    }
+
+    // MARK: - Auto-fill Logic (Stich only)
+
+    private func handleAutoFill(changedIndex: Int, newValue: String) {
+        if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if teamCount == 2 {
+                let other = changedIndex == 0 ? 1 : 0
+                stich[other] = ""
+            }
+            isMatch = false
+            return
+        }
+
+        guard let changedVal = Int(newValue) else { return }
+
+        if teamCount == 2 {
+            let other = changedIndex == 0 ? 1 : 0
+            let remaining = vm.REQUIRED_SUM - changedVal
+            if remaining >= 0 && remaining <= vm.MAX_STICH {
+                stich[other] = String(remaining)
+            }
+        } else {
+            var otherSum = 0
+            var emptyIndices: [Int] = []
+            for j in 0..<teamCount where j != changedIndex {
+                if let v = Int(stich[j]) {
+                    otherSum += v
+                } else {
+                    emptyIndices.append(j)
+                }
+            }
+            if emptyIndices.count == 1 {
+                let remaining = vm.REQUIRED_SUM - otherSum - changedVal
+                if remaining >= 0 && remaining <= vm.MAX_STICH {
+                    stich[emptyIndices[0]] = String(remaining)
+                }
+            }
+        }
+
+        let allValues = (0..<teamCount).compactMap { Int(stich[$0]) }
+        isMatch = allValues.contains(vm.REQUIRED_SUM)
+    }
+
+    private func handleEditAutoFill(changedIndex: Int, newValue: String, roundTeamCount: Int) {
+        if newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if roundTeamCount == 2 {
+                let other = changedIndex == 0 ? 1 : 0
+                editStich[other] = ""
+            }
+            editMatch = false
+            return
+        }
+
+        guard let changedVal = Int(newValue) else { return }
+
+        if roundTeamCount == 2 {
+            let other = changedIndex == 0 ? 1 : 0
+            let remaining = vm.REQUIRED_SUM - changedVal
+            if remaining >= 0 && remaining <= vm.MAX_STICH {
+                editStich[other] = String(remaining)
+            }
+        } else {
+            var otherSum = 0
+            var emptyIndices: [Int] = []
+            for j in 0..<roundTeamCount where j != changedIndex {
+                if let v = Int(editStich[j]) {
+                    otherSum += v
+                } else {
+                    emptyIndices.append(j)
+                }
+            }
+            if emptyIndices.count == 1 {
+                let remaining = vm.REQUIRED_SUM - otherSum - changedVal
+                if remaining >= 0 && remaining <= vm.MAX_STICH {
+                    editStich[emptyIndices[0]] = String(remaining)
+                }
+            }
+        }
+
+        let allValues = (0..<roundTeamCount).compactMap { Int(editStich[$0]) }
+        editMatch = allValues.contains(vm.REQUIRED_SUM)
+    }
+
+    // MARK: - Edit Helpers
 
     private func canSaveEdit(for runde: Runde) -> Bool {
-        // validate fields and ensure something changed
-        if vm.validatePunkteField(editPunkteA) != nil || vm.validatePunkteField(editPunkteB) != nil {
-            return false
+        let tc = runde.teamCount
+        for i in 0..<tc {
+            if vm.validateStichField(editStich[i]) != nil { return false }
+            if vm.validateWeisField(editWeis[i]) != nil { return false }
         }
-        guard let a = Int(editPunkteA), let b = Int(editPunkteB) else { return false }
-        if a == runde.punkteTeamA && b == runde.punkteTeamB && editSpielart == runde.spielart {
-            return false
-        }
-        return true
-    }
+        let stichValues = (0..<tc).compactMap { Int(editStich[$0]) }
+        guard stichValues.count == tc else { return false }
 
-    private func startEditing(_ runde: Runde) {
-        editingRunde = runde
+        let stichChanged = (0..<tc).contains { stichValues[$0] != runde.stich(forTeam: $0) }
+        let weisChanged = (0..<tc).contains { i in
+            let newW = Int(editWeis[i].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
+            return newW != runde.weis(forTeam: i)
+        }
+        let spielartChanged = editSpielart != runde.spielart
+        let expectedBonus = vm.MATCH_BONUS * runde.faktor
+        let wasMatch = (0..<tc).contains { runde.bonus(forTeam: $0) == expectedBonus }
+        let matchChanged = editMatch != wasMatch
+
+        return stichChanged || weisChanged || spielartChanged || matchChanged
     }
 
     private func saveEditing() {
-        guard let r = editingRunde, let a = Int(editPunkteA), let b = Int(editPunkteB) else { return }
-        vm.updateRunde(r, punkteA: a, punkteB: b, spielart: editSpielart, match: editMatch)
-        editingRunde = nil
-    }
-
-    private func delete(at offsets: IndexSet) {
-        for index in offsets {
-            let r = runden[index]
-            vm.delete(runde: r)
+        guard let r = editingRunde else { return }
+        let stichValues = (0..<r.teamCount).compactMap { Int(editStich[$0]) }
+        guard stichValues.count == r.teamCount else { return }
+        let weisValues = (0..<r.teamCount).map { i -> Int in
+            Int(editWeis[i].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
         }
+        vm.updateRunde(r, stich: stichValues, weis: weisValues, spielart: editSpielart, match: editMatch)
+        editingRunde = nil
     }
 }
