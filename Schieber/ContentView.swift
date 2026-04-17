@@ -465,12 +465,13 @@ struct ContentView: View {
                     // Show the round's descending number in the sheet title (e.g. "Runde 4 bearbeiten")
                     .navigationTitle(runden.firstIndex(where: { $0.id == r.id }).map { "Runde \(runden.count - $0) bearbeiten" } ?? "Runde bearbeiten")
                     .toolbar {
-                        ToolbarItem(placement: .navigationBarLeading) {
+                        // Use standard sheet placements so buttons appear reliably on modal sheets
+                        ToolbarItem(placement: .cancellationAction) {
                             Button("Abbrechen") {
                                 editingRunde = nil
                             }
                         }
-                        ToolbarItem(placement: .navigationBarTrailing) {
+                        ToolbarItem(placement: .confirmationAction) {
                             Button("Speichern") {
                                 saveEditing()
                             }
