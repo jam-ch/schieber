@@ -199,6 +199,8 @@ struct ContentView: View {
                             punkteA = ""
                             punkteB = ""
                             isMatch = false
+                            // Ensure next new round defaults to Normal
+                            spielart = .normal
                         }
                      }
                       .disabled(!canAdd || roundSumError != nil)
