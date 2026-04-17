@@ -363,7 +363,7 @@ struct ContentView: View {
                      }
                  }
             }
-            .navigationTitle("Schieber Zähler")
+            .navigationTitle("Jass Tafel")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
@@ -460,30 +460,31 @@ struct ContentView: View {
                                 Toggle("Match (Bonus +\(vm.MATCH_BONUS))", isOn: $editMatch)
                                     .accessibilityLabel("Match für diese Runde")
                              }
-                        // Show the round's descending number in the sheet title (e.g. "Runde 4 bearbeiten")
-                        .navigationTitle(runden.firstIndex(where: { $0.id == r.id }).map { "Runde \(runden.count - $0) bearbeiten" } ?? "Runde bearbeiten")
-                        .toolbar {
-                            ToolbarItem(placement: .navigationBarLeading) {
-                                Button("Abbrechen") {
-                                    editingRunde = nil
-                                }
-                            }
-                            ToolbarItem(placement: .navigationBarTrailing) {
-                                Button("Speichern") {
-                                    saveEditing()
-                                }
-                                .disabled(!canSaveEdit(for: r) || vm.validateRoundSum(editPunkteA, editPunkteB) != nil)
+                        } // end Form
+                    } // end NavigationStack
+                    // Show the round's descending number in the sheet title (e.g. "Runde 4 bearbeiten")
+                    .navigationTitle(runden.firstIndex(where: { $0.id == r.id }).map { "Runde \(runden.count - $0) bearbeiten" } ?? "Runde bearbeiten")
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button("Abbrechen") {
+                                editingRunde = nil
                             }
                         }
-                        .onAppear {
-                            // initialize edit fields
-                            editPunkteA = String(r.punkteTeamA)
-                            editPunkteB = String(r.punkteTeamB)
-                            editSpielart = r.spielart
-                            // initialize match flag from existing bonuses using the multiplier (MATCH_BONUS * factor)
-                            let expected = vm.MATCH_BONUS * r.faktor
-                            editMatch = (r.bonusA == expected) || (r.bonusB == expected)
+                        ToolbarItem(placement: .navigationBarTrailing) {
+                            Button("Speichern") {
+                                saveEditing()
+                            }
+                            .disabled(!canSaveEdit(for: r) || vm.validateRoundSum(editPunkteA, editPunkteB) != nil)
                         }
+                    }
+                    .onAppear {
+                        // initialize edit fields
+                        editPunkteA = String(r.punkteTeamA)
+                        editPunkteB = String(r.punkteTeamB)
+                        editSpielart = r.spielart
+                        // initialize match flag from existing bonuses using the multiplier (MATCH_BONUS * factor)
+                        let expected = vm.MATCH_BONUS * r.faktor
+                        editMatch = (r.bonusA == expected) || (r.bonusB == expected)
                     }
                 } else {
                     // fallback empty view
