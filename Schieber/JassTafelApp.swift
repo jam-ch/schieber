@@ -1,6 +1,6 @@
 //
-//  SchieberApp.swift
-//  Schieber
+//  JassTafelApp.swift
+//  JassTafel
 //
 //  Created by Joerg Ammann on 27.01.2026.
 //
@@ -9,7 +9,7 @@ import SwiftUI
 import SwiftData
 
 @main
-struct SchieberApp: App {
+struct JassTafelApp: App {
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Runde.self,

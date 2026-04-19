@@ -143,7 +143,7 @@ struct ContentView: View {
                 }
                 rundenSection
             }
-            .navigationTitle("Jass Tafel")
+            .navigationTitle("JassTafel")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
