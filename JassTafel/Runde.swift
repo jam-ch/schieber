@@ -21,6 +21,9 @@ final class Runde {
     var createdAt: Date
     var teamCount: Int = 2
 
+    // Which team called trump (-1 = not set)
+    var trumpTeamIndex: Int = -1
+
     // Match bonus (stored pre-multiplied)
     var bonusA: Int = 0
     var bonusB: Int = 0

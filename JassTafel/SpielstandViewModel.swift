@@ -65,7 +65,7 @@ final class SpielstandViewModel: ObservableObject {
     }
 
     @discardableResult
-    func addRunde(stich: [String], weis: [String], teamCount: Int, spielart: Spielart, match: Bool = false) -> Bool {
+    func addRunde(stich: [String], weis: [String], teamCount: Int, spielart: Spielart, match: Bool = false, trumpTeamIndex: Int = -1) -> Bool {
         guard let ctx = modelContext else { return false }
         let stichValues = stich.prefix(teamCount).compactMap { Int($0) }
         guard stichValues.count == teamCount else { return false }
@@ -77,6 +77,7 @@ final class SpielstandViewModel: ObservableObject {
         }
 
         let r = Runde(stich: stichValues, weis: weisValues, spielartRaw: spielart.rawValue, teamCount: teamCount)
+        r.trumpTeamIndex = trumpTeamIndex
         if match {
             let appliedBonus = MATCH_BONUS * r.faktor
             if let matchIndex = stichValues.firstIndex(where: { $0 == REQUIRED_SUM }) {
@@ -87,7 +88,7 @@ final class SpielstandViewModel: ObservableObject {
         return true
     }
 
-    func updateRunde(_ runde: Runde, stich: [Int], weis: [Int], spielart: Spielart, match: Bool = false) {
+    func updateRunde(_ runde: Runde, stich: [Int], weis: [Int], spielart: Spielart, match: Bool = false, trumpTeamIndex: Int = -1) {
         let activeStich = Array(stich.prefix(runde.teamCount))
         guard activeStich.reduce(0, +) == REQUIRED_SUM else { return }
 
@@ -96,6 +97,7 @@ final class SpielstandViewModel: ObservableObject {
             runde.setWeis(weis.indices.contains(i) ? weis[i] : 0, forTeam: i)
         }
         runde.spielart = spielart
+        runde.trumpTeamIndex = trumpTeamIndex
 
         for i in 0..<4 {
             runde.setBonus(0, forTeam: i)

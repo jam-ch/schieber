@@ -52,6 +52,7 @@ struct ContentView: View {
     @AppStorage("teamCName") private var teamCName: String = "Team C"
     @AppStorage("teamDName") private var teamDName: String = "Team D"
     @AppStorage("targetScore") private var targetScore: Int = 1000
+    @AppStorage("trackTrumpf") private var trackTrumpf: Bool = false
     @State private var customTargetText: String = ""
     @State private var showCustomTarget: Bool = false
 
@@ -62,6 +63,7 @@ struct ContentView: View {
     @State private var weis: [String] = ["", "", "", ""]
     @State private var isMatch = false
     @State private var spielart: Spielart = .normal
+    @State private var trumpTeamIndex: Int = 0
     @FocusState private var focusedField: FocusField?
 
     // Edit sheet state
@@ -70,6 +72,7 @@ struct ContentView: View {
     @State private var editWeis: [String] = ["", "", "", ""]
     @State private var editMatch = false
     @State private var editSpielart: Spielart = .normal
+    @State private var editTrumpTeamIndex: Int = 0
     @FocusState private var editFocusedField: EditFocusField?
 
     @State private var autoFilledIndex: Int? = nil
@@ -283,6 +286,8 @@ struct ContentView: View {
                     .disabled(Int(customTargetText) == nil || (Int(customTargetText) ?? 0) <= 0)
                 }
             }
+
+            Toggle("Trumpf erfassen", isOn: $trackTrumpf)
         } header: {
             Button {
                 withAnimation {
@@ -398,6 +403,14 @@ struct ContentView: View {
 
     private var neueRundeSection: some View {
         Section("Neue Runde") {
+            if trackTrumpf {
+                Picker("Trumpf", selection: $trumpTeamIndex) {
+                    ForEach(0..<teamCount, id: \.self) { i in
+                        Text(teamNames[i]).tag(i)
+                    }
+                }
+            }
+
             ForEach(0..<teamCount, id: \.self) { i in
                 VStack(alignment: .leading, spacing: 4) {
                     Text(teamNames[i])
@@ -438,12 +451,14 @@ struct ContentView: View {
                 .accessibilityLabel("Match aktivieren")
 
             Button("Runde hinzufügen") {
-                if vm.addRunde(stich: stich, weis: weis, teamCount: teamCount, spielart: spielart, match: isMatch) {
+                if vm.addRunde(stich: stich, weis: weis, teamCount: teamCount, spielart: spielart, match: isMatch, trumpTeamIndex: trackTrumpf ? trumpTeamIndex : -1) {
                     stich = ["", "", "", ""]
                     weis = ["", "", "", ""]
                     isMatch = false
                     spielart = .normal
                     autoFilledIndex = nil
+                    // Auto-suggest next trump team
+                    trumpTeamIndex = (trumpTeamIndex + 1) % teamCount
                     focusedField = .stich(0)
                 }
             }
@@ -468,6 +483,14 @@ struct ContentView: View {
                                 .foregroundColor(.secondary)
                             Text("\(runde.spielart.titel) x\(runde.faktor)")
                                 .font(.headline)
+                            if trackTrumpf && runde.trumpTeamIndex >= 0 && runde.trumpTeamIndex < runde.teamCount {
+                                Text("T: \(teamNames[runde.trumpTeamIndex])")
+                                    .font(.caption2)
+                                    .foregroundColor(.orange)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Capsule().fill(Color.orange.opacity(0.15)))
+                            }
                             Spacer()
                             Text(Self.dateFormatter.string(from: runde.createdAt))
                                 .font(.caption)
@@ -558,6 +581,13 @@ struct ContentView: View {
                                 Text("\(art.titel) (x\(art.rawValue))").tag(art)
                             }
                         }
+                        if trackTrumpf {
+                            Picker("Trumpf", selection: $editTrumpTeamIndex) {
+                                ForEach(0..<r.teamCount, id: \.self) { i in
+                                    Text(teamNames[i]).tag(i)
+                                }
+                            }
+                        }
                         Toggle("Match (Bonus +\(vm.MATCH_BONUS))", isOn: $editMatch)
                             .accessibilityLabel("Match für diese Runde")
                     }
@@ -590,6 +620,7 @@ struct ContentView: View {
                         editWeis[i] = w > 0 ? String(w) : ""
                     }
                     editSpielart = r.spielart
+                    editTrumpTeamIndex = r.trumpTeamIndex >= 0 ? r.trumpTeamIndex : 0
                     let expected = vm.MATCH_BONUS * r.faktor
                     editMatch = (0..<r.teamCount).contains { r.bonus(forTeam: $0) == expected }
                 }
@@ -723,8 +754,9 @@ struct ContentView: View {
         let expectedBonus = vm.MATCH_BONUS * runde.faktor
         let wasMatch = (0..<tc).contains { runde.bonus(forTeam: $0) == expectedBonus }
         let matchChanged = editMatch != wasMatch
+        let trumpChanged = editTrumpTeamIndex != runde.trumpTeamIndex
 
-        return stichChanged || weisChanged || spielartChanged || matchChanged
+        return stichChanged || weisChanged || spielartChanged || matchChanged || trumpChanged
     }
 
     private func saveEditing() {
@@ -734,7 +766,7 @@ struct ContentView: View {
         let weisValues = (0..<r.teamCount).map { i -> Int in
             Int(editWeis[i].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
         }
-        vm.updateRunde(r, stich: stichValues, weis: weisValues, spielart: editSpielart, match: editMatch)
+        vm.updateRunde(r, stich: stichValues, weis: weisValues, spielart: editSpielart, match: editMatch, trumpTeamIndex: trackTrumpf ? editTrumpTeamIndex : -1)
         editingRunde = nil
     }
 }

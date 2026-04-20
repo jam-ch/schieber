@@ -10,6 +10,8 @@ import SwiftData
 
 @main
 struct JassTafelApp: App {
+    @State private var showSplash = true
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Runde.self,
@@ -25,7 +27,20 @@ struct JassTafelApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ZStack {
+                ContentView()
+
+                if showSplash {
+                    SplashScreenView()
+                        .transition(.opacity)
+                }
+            }
+            .task {
+                try? await Task.sleep(for: .seconds(1.5))
+                withAnimation(.easeOut(duration: 0.3)) {
+                    showSplash = false
+                }
+            }
         }
         .modelContainer(sharedModelContainer)
     }
