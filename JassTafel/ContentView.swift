@@ -51,6 +51,11 @@ struct ContentView: View {
     @AppStorage("teamBName") private var teamBName: String = "Team B"
     @AppStorage("teamCName") private var teamCName: String = "Team C"
     @AppStorage("teamDName") private var teamDName: String = "Team D"
+    @AppStorage("targetScore") private var targetScore: Int = 1000
+    @State private var customTargetText: String = ""
+    @State private var showCustomTarget: Bool = false
+
+    private let targetPresets = [1000, 2000, 2500]
 
     // New-round input
     @State private var stich: [String] = ["", "", "", ""]
@@ -67,8 +72,12 @@ struct ContentView: View {
     @State private var editSpielart: Spielart = .normal
     @FocusState private var editFocusedField: EditFocusField?
 
+    @State private var autoFilledIndex: Int? = nil
+    @State private var editAutoFilledIndex: Int? = nil
+    @State private var teamsExpanded: Bool = true
     @State private var showResetAlert = false
     @State private var scoreboardExpanded: Bool = false
+    @State private var showChart: Bool = false
     @State private var pendingDelete: Runde? = nil
     @State private var showDeleteAlert = false
 
@@ -201,7 +210,7 @@ struct ContentView: View {
     // MARK: - Teams Section
 
     private var teamsSection: some View {
-        Section("Teams") {
+        Section(isExpanded: $teamsExpanded) {
             ForEach(0..<teamCount, id: \.self) { i in
                 HStack {
                     TextField("Name für Team \(teamLetters[i])", text: teamNameBinding(for: i))
@@ -225,61 +234,163 @@ struct ContentView: View {
                     Label("Team hinzufügen", systemImage: "plus.circle")
                 }
             }
+
+            // Target score picker
+            HStack {
+                Text("Zielpunktzahl")
+                Spacer()
+                Menu {
+                    ForEach(targetPresets, id: \.self) { preset in
+                        Button {
+                            targetScore = preset
+                            showCustomTarget = false
+                        } label: {
+                            HStack {
+                                Text("\(preset)")
+                                if targetScore == preset && !showCustomTarget {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                    Divider()
+                    Button {
+                        showCustomTarget = true
+                        customTargetText = "\(targetScore)"
+                    } label: {
+                        HStack {
+                            Text("Eigene…")
+                            if showCustomTarget {
+                                Image(systemName: "checkmark")
+                            }
+                        }
+                    }
+                } label: {
+                    Text("\(targetScore)")
+                        .foregroundColor(.accentColor)
+                }
+            }
+            if showCustomTarget {
+                HStack {
+                    TextField("Zielpunktzahl", text: $customTargetText)
+                        .keyboardType(.numberPad)
+                    Button("OK") {
+                        if let val = Int(customTargetText), val > 0 {
+                            targetScore = val
+                        }
+                        showCustomTarget = false
+                    }
+                    .disabled(Int(customTargetText) == nil || (Int(customTargetText) ?? 0) <= 0)
+                }
+            }
+        } header: {
+            Button {
+                withAnimation {
+                    teamsExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    Text("Teams")
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .rotationEffect(.degrees(teamsExpanded ? 90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
         }
     }
 
     // MARK: - Scoreboard Section
 
     private var scoreboardSection: some View {
-        Section(header: Text("Spielstand")) {
-            Button(action: {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                    scoreboardExpanded.toggle()
-                }
-            }) {
-                VStack(spacing: 8) {
-                    let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: min(teamCount, 2))
-                    LazyVGrid(columns: columns, spacing: 12) {
-                        ForEach(0..<teamCount, id: \.self) { i in
-                            let total = runden.map { $0.total(forTeam: i) }.reduce(0, +)
-                            VStack(spacing: 4) {
-                                Text(teamNames[i])
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text("\(total)")
-                                    .font(.system(size: scoreboardExpanded ? 34 : 24, weight: .bold, design: .rounded))
+        Section {
+            if showChart && runden.count >= 2 {
+                ScoreChartView(
+                    runden: runden,
+                    teamNames: teamNames,
+                    teamCount: teamCount,
+                    targetScore: targetScore
+                )
+            } else {
+                Button(action: {
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                        scoreboardExpanded.toggle()
+                    }
+                }) {
+                    VStack(spacing: 8) {
+                        let columns = Array(repeating: GridItem(.flexible(), spacing: 16), count: min(teamCount, 2))
+                        LazyVGrid(columns: columns, spacing: 12) {
+                            ForEach(0..<teamCount, id: \.self) { i in
+                                let total = runden.map { $0.total(forTeam: i) }.reduce(0, +)
+                                let hasWon = total >= targetScore
+                                VStack(spacing: 4) {
+                                    Text(teamNames[i])
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    HStack(spacing: 4) {
+                                        if hasWon {
+                                            Image(systemName: "trophy.fill")
+                                                .foregroundColor(.yellow)
+                                                .font(.system(size: scoreboardExpanded ? 20 : 14))
+                                        }
+                                        Text("\(total)")
+                                            .font(.system(size: scoreboardExpanded ? 34 : 24, weight: .bold, design: .rounded))
+                                            .foregroundColor(hasWon ? .green : .primary)
+                                    }
                                     .accessibilityLabel("Spielstand \(teamNames[i])")
                                     .accessibilityValue("\(total)")
-                            }
-                        }
-                    }
-
-                    if scoreboardExpanded {
-                        VStack(spacing: 4) {
-                            HStack {
-                                Text("Runden: \(runden.count)")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                Spacer()
-                                if let last = runden.first {
-                                    Text(Self.dateFormatter.string(from: last.createdAt))
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
+                                    ProgressView(value: min(Double(total), Double(targetScore)), total: Double(targetScore))
+                                        .tint(hasWon ? .green : .accentColor)
+                                        .scaleEffect(y: 0.7)
                                 }
                             }
                         }
-                        .transition(.opacity.combined(with: .move(edge: .top)))
+
+                        if scoreboardExpanded {
+                            VStack(spacing: 4) {
+                                HStack {
+                                    Text("Runden: \(runden.count)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    if let last = runden.first {
+                                        Text(Self.dateFormatter.string(from: last.createdAt))
+                                            .font(.caption2)
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                            }
+                            .transition(.opacity.combined(with: .move(edge: .top)))
+                        }
+                    }
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .fill(Color(.secondarySystemBackground))
+                    )
+                    .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                }
+                .buttonStyle(PlainButtonStyle())
+                .accessibilityAddTraits(.isButton)
+            }
+        } header: {
+            HStack {
+                Text(showChart ? "Punkteverlauf" : "Spielstand")
+                Spacer()
+                if runden.count >= 2 {
+                    Button {
+                        withAnimation {
+                            showChart.toggle()
+                        }
+                    } label: {
+                        Image(systemName: showChart ? "number.square" : "chart.xyaxis.line")
+                            .font(.footnote)
                     }
                 }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color(.secondarySystemBackground))
-                )
-                .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
             }
-            .buttonStyle(PlainButtonStyle())
-            .accessibilityAddTraits(.isButton)
         }
     }
 
@@ -332,6 +443,7 @@ struct ContentView: View {
                     weis = ["", "", "", ""]
                     isMatch = false
                     spielart = .normal
+                    autoFilledIndex = nil
                     focusedField = .stich(0)
                 }
             }
@@ -517,10 +629,22 @@ struct ContentView: View {
                     emptyIndices.append(j)
                 }
             }
+            // Determine which index to auto-fill
+            let fillIndex: Int?
             if emptyIndices.count == 1 {
+                fillIndex = emptyIndices[0]
+            } else if emptyIndices.isEmpty, let prev = autoFilledIndex, prev != changedIndex {
+                // All fields filled — recalculate the previously auto-filled field
+                otherSum -= (Int(stich[prev]) ?? 0)
+                fillIndex = prev
+            } else {
+                fillIndex = nil
+            }
+            if let idx = fillIndex {
                 let remaining = vm.REQUIRED_SUM - otherSum - changedVal
                 if remaining >= 0 && remaining <= vm.MAX_STICH {
-                    stich[emptyIndices[0]] = String(remaining)
+                    stich[idx] = String(remaining)
+                    autoFilledIndex = idx
                 }
             }
         }
@@ -557,10 +681,20 @@ struct ContentView: View {
                     emptyIndices.append(j)
                 }
             }
+            let fillIndex: Int?
             if emptyIndices.count == 1 {
+                fillIndex = emptyIndices[0]
+            } else if emptyIndices.isEmpty, let prev = editAutoFilledIndex, prev != changedIndex {
+                otherSum -= (Int(editStich[prev]) ?? 0)
+                fillIndex = prev
+            } else {
+                fillIndex = nil
+            }
+            if let idx = fillIndex {
                 let remaining = vm.REQUIRED_SUM - otherSum - changedVal
                 if remaining >= 0 && remaining <= vm.MAX_STICH {
-                    editStich[emptyIndices[0]] = String(remaining)
+                    editStich[idx] = String(remaining)
+                    editAutoFilledIndex = idx
                 }
             }
         }
