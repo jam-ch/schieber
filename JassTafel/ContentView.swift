@@ -424,6 +424,15 @@ struct ContentView: View {
                             if let err = vm.validateStichField(stich[i]) {
                                 Text(err).foregroundColor(.red).font(.caption2)
                             }
+                            if !stich[i].isEmpty {
+                                clearFieldButton(label: "Stich löschen") {
+                                    stich[i] = ""
+                                    focusedField = nil
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                        focusedField = .stich(i)
+                                    }
+                                }
+                            }
                         }
                         VStack(alignment: .leading, spacing: 2) {
                             TextField("Weis", text: weisBinding(at: i))
@@ -432,6 +441,7 @@ struct ContentView: View {
                             if let err = vm.validateWeisField(weis[i]) {
                                 Text(err).foregroundColor(.red).font(.caption2)
                             }
+                            weisPresets(for: weisBinding(at: i))
                         }
                     }
                 }
@@ -560,6 +570,15 @@ struct ContentView: View {
                                         if let err = vm.validateStichField(editStich[i]) {
                                             Text(err).foregroundColor(.red).font(.caption2)
                                         }
+                                        if !editStich[i].isEmpty {
+                                            clearFieldButton(label: "Stich löschen") {
+                                                editStich[i] = ""
+                                                editFocusedField = nil
+                                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                                    editFocusedField = .stich(i)
+                                                }
+                                            }
+                                        }
                                     }
                                     VStack(alignment: .leading, spacing: 2) {
                                         TextField("Weis", text: editWeisBinding(at: i))
@@ -568,6 +587,7 @@ struct ContentView: View {
                                         if let err = vm.validateWeisField(editWeis[i]) {
                                             Text(err).foregroundColor(.red).font(.caption2)
                                         }
+                                        weisPresets(for: editWeisBinding(at: i))
                                     }
                                 }
                             }
@@ -627,6 +647,55 @@ struct ContentView: View {
             }
         } else {
             EmptyView()
+        }
+    }
+
+    // MARK: - Clear Button
+
+    private func clearFieldButton(label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.caption2)
+                Text(label)
+                    .font(.caption2)
+            }
+            .foregroundColor(.secondary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Weis Presets
+
+    private static let weisPresetValues = [20, 50, 100, 150, 200]
+
+    private func weisPresets(for binding: Binding<String>) -> some View {
+        HStack(spacing: 6) {
+            ForEach(Self.weisPresetValues, id: \.self) { value in
+                Button {
+                    let current = Int(binding.wrappedValue) ?? 0
+                    binding.wrappedValue = String(current + value)
+                } label: {
+                    Text("+\(value)")
+                        .font(.caption2)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.accentColor.opacity(0.12)))
+                }
+                .buttonStyle(.plain)
+            }
+            if !binding.wrappedValue.isEmpty {
+                Button {
+                    binding.wrappedValue = ""
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.caption2)
+                        .padding(4)
+                        .background(Circle().fill(Color.red.opacity(0.12)))
+                        .foregroundColor(.red)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
