@@ -155,7 +155,16 @@ struct ContentView: View {
                 }
                 rundenSection
             }
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("Fertig") {
+                        focusedField = nil
+                    }
+                }
+            }
             .navigationTitle("JassTafel")
+            .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
@@ -164,13 +173,6 @@ struct ContentView: View {
                         }
                     } label: {
                         Image(systemName: "ellipsis.circle")
-                    }
-                }
-                ToolbarItemGroup(placement: .keyboard) {
-                    Spacer()
-                    Button("Fertig") {
-                        focusedField = nil
-                        editFocusedField = nil
                     }
                 }
             }
@@ -416,16 +418,13 @@ struct ContentView: View {
                     Text(teamNames[i])
                         .font(.caption)
                         .foregroundColor(.secondary)
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
+                    HStack(alignment: .top, spacing: 8) {
+                        HStack(spacing: 4) {
                             TextField("Stich", text: stichBinding(at: i))
                                 .keyboardType(.numberPad)
                                 .focused($focusedField, equals: .stich(i))
-                            if let err = vm.validateStichField(stich[i]) {
-                                Text(err).foregroundColor(.red).font(.caption2)
-                            }
                             if !stich[i].isEmpty {
-                                clearFieldButton(label: "Stich löschen") {
+                                clearIconButton {
                                     stich[i] = ""
                                     focusedField = nil
                                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -434,10 +433,16 @@ struct ContentView: View {
                                 }
                             }
                         }
+                        .frame(width: 100)
                         VStack(alignment: .leading, spacing: 2) {
-                            TextField("Weis", text: weisBinding(at: i))
-                                .keyboardType(.numberPad)
-                                .focused($focusedField, equals: .weis(i))
+                            HStack(spacing: 4) {
+                                TextField("Weis", text: weisBinding(at: i))
+                                    .keyboardType(.numberPad)
+                                    .focused($focusedField, equals: .weis(i))
+                                if !weis[i].isEmpty {
+                                    clearIconButton { weis[i] = "" }
+                                }
+                            }
                             if let err = vm.validateWeisField(weis[i]) {
                                 Text(err).foregroundColor(.red).font(.caption2)
                             }
@@ -562,16 +567,13 @@ struct ContentView: View {
                                 Text(teamNames[i])
                                     .font(.caption)
                                     .foregroundColor(.secondary)
-                                HStack(spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 2) {
+                                HStack(alignment: .top, spacing: 8) {
+                                    HStack(spacing: 4) {
                                         TextField("Stich", text: editStichBinding(at: i))
                                             .keyboardType(.numberPad)
                                             .focused($editFocusedField, equals: .stich(i))
-                                        if let err = vm.validateStichField(editStich[i]) {
-                                            Text(err).foregroundColor(.red).font(.caption2)
-                                        }
                                         if !editStich[i].isEmpty {
-                                            clearFieldButton(label: "Stich löschen") {
+                                            clearIconButton {
                                                 editStich[i] = ""
                                                 editFocusedField = nil
                                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
@@ -580,10 +582,16 @@ struct ContentView: View {
                                             }
                                         }
                                     }
+                                    .frame(width: 100)
                                     VStack(alignment: .leading, spacing: 2) {
-                                        TextField("Weis", text: editWeisBinding(at: i))
-                                            .keyboardType(.numberPad)
-                                            .focused($editFocusedField, equals: .weis(i))
+                                        HStack(spacing: 4) {
+                                            TextField("Weis", text: editWeisBinding(at: i))
+                                                .keyboardType(.numberPad)
+                                                .focused($editFocusedField, equals: .weis(i))
+                                            if !editWeis[i].isEmpty {
+                                                clearIconButton { editWeis[i] = "" }
+                                            }
+                                        }
                                         if let err = vm.validateWeisField(editWeis[i]) {
                                             Text(err).foregroundColor(.red).font(.caption2)
                                         }
@@ -632,6 +640,12 @@ struct ContentView: View {
                         }
                         .disabled(!canSaveEdit(for: r) || editRoundSumError != nil)
                     }
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Fertig") {
+                            editFocusedField = nil
+                        }
+                    }
                 }
                 .onAppear {
                     for i in 0..<r.teamCount {
@@ -650,17 +664,13 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Clear Button
+    // MARK: - Clear Buttons
 
-    private func clearFieldButton(label: String, action: @escaping () -> Void) -> some View {
+    private func clearIconButton(action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(spacing: 4) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.caption2)
-                Text(label)
-                    .font(.caption2)
-            }
-            .foregroundColor(.secondary)
+            Image(systemName: "xmark.circle.fill")
+                .font(.caption)
+                .foregroundColor(.secondary)
         }
         .buttonStyle(.plain)
     }
@@ -671,28 +681,19 @@ struct ContentView: View {
 
     private func weisPresets(for binding: Binding<String>) -> some View {
         HStack(spacing: 6) {
+            Text("+")
+                .font(.caption2)
+                .foregroundColor(.secondary)
             ForEach(Self.weisPresetValues, id: \.self) { value in
                 Button {
                     let current = Int(binding.wrappedValue) ?? 0
                     binding.wrappedValue = String(current + value)
                 } label: {
-                    Text("+\(value)")
+                    Text("\(value)")
                         .font(.caption2)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
                         .background(Capsule().fill(Color.accentColor.opacity(0.12)))
-                }
-                .buttonStyle(.plain)
-            }
-            if !binding.wrappedValue.isEmpty {
-                Button {
-                    binding.wrappedValue = ""
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.caption2)
-                        .padding(4)
-                        .background(Circle().fill(Color.red.opacity(0.12)))
-                        .foregroundColor(.red)
                 }
                 .buttonStyle(.plain)
             }

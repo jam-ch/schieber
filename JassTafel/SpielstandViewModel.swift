@@ -17,7 +17,7 @@ final class SpielstandViewModel: ObservableObject {
 
     func validateStichField(_ value: String) -> String? {
         if value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            return "Stich erforderlich"
+            return nil
         }
         guard let v = Int(value) else {
             return "Nur Zahlen erlaubt"
